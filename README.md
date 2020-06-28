@@ -1,2 +1,102 @@
 # quantumbrain
-A python, numpy implemention deep learning framework. `import quantumbrain as qb`
+
+## Train example
+
+``` python
+import quantumbrain as qb
+from quantumbrain.datasets import mnist
+import numpy as np
+
+
+def create_model():
+    inputs = qb.layers.Input([None, 1, 28, 28])
+    x = qb.layers.Conv(6, 3, 2, kernel_initializer="he")(inputs)
+    x = qb.layers.Relu()(x)
+    x = qb.layers.Conv(16, 3, 2, kernel_initializer="he")(x)
+    x = qb.layers.Relu()(x)
+    x = qb.layers.Dropout(drop_rate=0.5)(x)
+    x = qb.layers.Flatten()(x)
+    x = qb.layers.Dense(100, kernel_initializer="he")(x)
+    x = qb.layers.Relu()(x)
+    x = qb.layers.Dense(50, kernel_initializer="he")(x)
+    x = qb.layers.Relu()(x)
+    output = qb.layers.Dense(10)(x)
+
+    model = qb.model.Model(inputs=inputs, outputs=output)
+    return model
+
+
+def accuracy(x, y):
+    y_pred = model(x)
+    y_pred = np.argmax(y_pred, axis=1)
+
+    if y.ndim != 1:
+        y = np.argmax(y, axis=1)
+
+    return np.sum(y_pred == y) / x.shape[0]
+
+
+model = create_model()
+loss = qb.losses.CE()
+optimizer = qb.optimizers.Adam()
+
+trainer = qb.trainer.Trainer(model, loss, optimizer)
+
+(x_train, y_train), (x_test, y_test) = mnist.load_data()
+batch_size = 100
+for epoch in range(10):
+    for batch in range(0, len(x_train), batch_size):
+        x_batch = x_train[batch:batch+batch_size]
+        y_batch = y_train[batch:batch+batch_size]
+
+        pred_value, loss_value = trainer.train(x_batch, y_batch)
+
+    acc = accuracy(x_test, y_test)
+    print("epoch: {}, accuracy: {}".format(epoch, acc))
+
+    if epoch == 9:
+     model.save("./result/ckpt_{}".format(epoch))
+```
+
+train accuracy:
+
+epoch: 0, accuracy: 0.8924
+
+epoch: 1, accuracy: 0.9162
+
+epoch: 2, accuracy: 0.9378
+
+epoch: 3, accuracy: 0.9417
+
+epoch: 4, accuracy: 0.9465
+
+epoch: 5, accuracy: 0.9531
+
+epoch: 6, accuracy: 0.9513
+
+epoch: 7, accuracy: 0.9554
+
+epoch: 8, accuracy: 0.9568
+
+epoch: 9, accuracy: 0.9595
+
+## save & restore weights
+
+``` python
+# save
+model.save("./result/ckpt_{}".format(epoch))
+
+# restore
+model = create_model()
+model.restore("./result/ckpt_9")
+```
+
+## predict
+
+``` python
+model = create_model()
+model.restore("./result/ckpt_9")
+y_pred = model(x)
+y_pred = qb.softmax(y_pred)
+print(y_pred)
+```
