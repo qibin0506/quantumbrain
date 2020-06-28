@@ -145,7 +145,6 @@ class Conv(Layer):
         self.col_w = None
 
     def call(self, inputs):
-        # (N, units)
         N, C, H, W = inputs.shape
 
         out_h = (H + 2 * self.pad - self.kernel_size) // self.stride + 1
@@ -223,6 +222,74 @@ class Conv(Layer):
 
         self._set_grads("W", dW)
         self._set_grads("b", db)
+
+        return dx
+
+
+class MaxPool(Layer):
+    def __init__(self,
+                 pool_size,
+                 stride=1,
+                 pad='same',
+                 name=None):
+        Layer.__init__(self, None, name)
+
+        self.pool_size = pool_size
+        self.stride = stride
+        self.pad = 1 if pad is 'same' else 0
+
+        self.arg_max = None
+
+    def call(self, inputs):
+        N, C, H, W = inputs.shape
+
+        out_h = (H + 2 * self.pad - self.pool_size) // self.stride + 1
+        out_w = (W + 2 * self.pad - self.pool_size) // self.stride + 1
+
+        # (N, C, out_h, out_W)
+        self.shape = [inputs.shape[0], C, out_h, out_w]
+        self.channels = C
+
+    def forward(self, x):
+        self.x = x
+        N, C, H, W = x.shape
+
+        out_h = (H + 2 * self.pad - self.pool_size) // self.stride + 1
+        out_w = (W + 2 * self.pad - self.pool_size) // self.stride + 1
+
+        # (N*out_h*out_w, C*pool_h*pool_w)
+        col = im2col(x, self.pool_size, self.pool_size, self.stride, self.pad)
+        # (N*out_h*out_w*C, pool_h*pool_w)
+        col = col.reshape((-1, self.pool_size * self.pool_size))
+
+        self.arg_max = np.argmax(col, axis=1)
+        # (N*out_h*out_w*C, 1)
+        out = np.max(col, axis=1)
+
+        # (N, out_h, out_w, C)
+        out = out.reshape((N, out_h, out_w, C))
+        # (N, C, out_h, out_w)
+        out = out.transpose((0, 3, 1, 2))
+
+        return out
+
+    def backward(self, dout):
+        # dout: (N, C, out_h, out_w)
+        N, C, H, W = self.x.shape
+
+        out_h = (H + 2 * self.pad - self.pool_size) // self.stride + 1
+        out_w = (W + 2 * self.pad - self.pool_size) // self.stride + 1
+
+        # (N, out_h, out_w, C)
+        dout = dout.transpose((0, 2, 3, 1))
+
+        # (N*out_h*out_w*C, pool_h*pool_w)
+        dmax = np.zeros((dout.size, self.pool_size * self.pool_size))
+        dmax[np.arange(self.arg_max.size), self.arg_max.flatten()] = dout.flatten()
+
+        # (N*out_h*out_w, C*pool_h*pool_w)
+        dcol = dmax.reshape((N * out_h * out_w, C * self.pool_size * self.pool_size))
+        dx = col2im(dcol, self.x.shape, self.pool_size, self.pool_size, self.stride, self.pad)
 
         return dx
 
