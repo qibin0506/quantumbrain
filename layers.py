@@ -10,19 +10,50 @@ class Layer:
         self.__build_layer_name(name)
         self.channels = channels
 
-        self.training = True
+        self.trainable = True
+        self.forwarded = False
+
         self.shape = None
-        self.x = None
+
+        # data
+        self.input = None
+        self.out = None
+
+        # layer
+        self.previous = []
+        self.next = []
 
     def __call__(self, *args, **kwargs):
         graph.layers[self.name] = self
+
         if len(args) != 0:
-            self.call(args[0])
+            previous = args[0]
+            if isinstance(previous, list):
+                self.previous.extend(previous)
+                for prev in self.previous:
+                    prev.next.append(self)
+            else:
+                self.previous.append(previous)
+                previous.next.append(self)
+
+            self.call(previous)
 
         return self
 
     def call(self, inputs):
         pass
+
+    def execute_forward(self, x):
+        self._clear_grads()
+
+        self.input = x
+        self.out = self.forward(x)
+        self.forwarded = True
+
+        return self.out
+
+    def execute_backward(self, dout):
+        return self.backward(dout)
 
     def forward(self, x):
         pass
@@ -37,13 +68,25 @@ class Layer:
         graph.params[self.__wrap_arg_name(name)] = value
 
     def _set_grads(self, name, grads):
-        graph.grads[self.__wrap_arg_name(name)] = grads
+        if self.__wrap_arg_name(name) in graph.grads.keys():
+            graph.grads[self.__wrap_arg_name(name)] += grads
+        else:
+            graph.grads[self.__wrap_arg_name(name)] = grads
 
     def _get_grads(self, name):
         return graph.grads[self.__wrap_arg_name(name)]
 
+    def _clear_grads(self):
+        prefix = self.__get_wrap_prefix()
+        for key in list(graph.grads.keys()):
+            if key.startswith(prefix):
+                del graph.grads[key]
+
+    def __get_wrap_prefix(self):
+        return self.name + ":"
+
     def __wrap_arg_name(self, arg_name):
-        return self.name + ":" + arg_name
+        return self.__get_wrap_prefix() + arg_name
 
     def __build_layer_name(self, name):
         if name is None:
@@ -81,13 +124,12 @@ class Flatten(Layer):
         self.shape = [inputs.shape[0], self.channels]
 
     def forward(self, x):
-        self.x = x
         # (N, C*H*W)
         x = x.reshape((x.shape[0], -1))
         return x
 
     def backward(self, dout):
-        dx = dout.reshape(self.x.shape)
+        dx = dout.reshape(self.input.shape)
         return dx
 
 
@@ -105,7 +147,6 @@ class Dense(Layer):
         self._set_param("b", np.zeros(self.channels))
 
     def forward(self, x):
-        self.x = x
         W = self._get_param("W")
         b = self._get_param("b")
 
@@ -113,7 +154,7 @@ class Dense(Layer):
         return np.dot(x, W) + b
 
     def backward(self, dout):
-        dW = np.dot(self.x.T, dout)
+        dW = np.dot(self.input.T, dout)
         db = np.sum(dout, axis=0)
 
         self._set_grads("W", dW)
@@ -138,7 +179,12 @@ class Conv(Layer):
         self.filters = filters
         self.kernel_size = kernel_size
         self.stride = stride
-        self.pad = 1 if pad is 'same' else 0
+
+        if pad is 'valid':
+            self.pad = 0
+        else:
+            self.pad = (kernel_size - 1) // 2
+
         self.kernel_initializer = get(kernel_initializer)
 
         self.col = None
@@ -158,7 +204,6 @@ class Conv(Layer):
         self._set_param("b", np.zeros(self.filters))
 
     def forward(self, x):
-        self.x = x
         pW = self._get_param("W")
         pb = self._get_param("b")
 
@@ -182,7 +227,6 @@ class Conv(Layer):
         # (N, FN, out_h, out_w)
         out = out.transpose((0, 3, 1, 2))
 
-        self.x = x
         self.col = col
         self.col_w = col_w
 
@@ -193,7 +237,7 @@ class Conv(Layer):
 
         pW = self._get_param("W")
 
-        N, C, H, W = self.x.shape
+        N, C, H, W = self.input.shape
         FN, C, FH, FW = pW.shape
 
         out_h = (H + 2 * self.pad - FH) // self.stride + 1
@@ -218,7 +262,7 @@ class Conv(Layer):
         # dout: (N*out_h*out_w, FN), col_w:(C*filter_h*filter_w, FN)
         # (N*out_h*out_w, C*filter_h*filter_w)
         dcol = np.dot(dout, self.col_w.T)
-        dx = col2im(dcol, self.x.shape, FH, FW, self.stride, self.pad)
+        dx = col2im(dcol, self.input.shape, FH, FW, self.stride, self.pad)
 
         self._set_grads("W", dW)
         self._set_grads("b", db)
@@ -251,7 +295,6 @@ class MaxPool(Layer):
         self.channels = C
 
     def forward(self, x):
-        self.x = x
         N, C, H, W = x.shape
 
         out_h = (H + 2 * self.pad - self.pool_size) // self.stride + 1
@@ -275,7 +318,7 @@ class MaxPool(Layer):
 
     def backward(self, dout):
         # dout: (N, C, out_h, out_w)
-        N, C, H, W = self.x.shape
+        N, C, H, W = self.input.shape
 
         out_h = (H + 2 * self.pad - self.pool_size) // self.stride + 1
         out_w = (W + 2 * self.pad - self.pool_size) // self.stride + 1
@@ -289,7 +332,7 @@ class MaxPool(Layer):
 
         # (N*out_h*out_w, C*pool_h*pool_w)
         dcol = dmax.reshape((N * out_h * out_w, C * self.pool_size * self.pool_size))
-        dx = col2im(dcol, self.x.shape, self.pool_size, self.pool_size, self.stride, self.pad)
+        dx = col2im(dcol, self.input.shape, self.pool_size, self.pool_size, self.stride, self.pad)
 
         return dx
 
@@ -305,14 +348,14 @@ class Dropout(Layer):
         self.channels = inputs.channels
 
     def forward(self, x):
-        if self.training:
+        if self.trainable:
             self.mask = np.random.rand(*x.shape) > self.drop_rate
             return x * self.mask
         else:
             return x
 
     def backward(self, dout):
-        if self.training:
+        if self.trainable:
             return dout * self.mask
         return dout
 
@@ -326,11 +369,10 @@ class Relu(Layer):
         self.channels = inputs.channels
 
     def forward(self, x):
-        self.x = x
         return (abs(x) + x) / 2
 
     def backward(self, dout):
-        dout[abs(self.x) + self.x == 0] = 0
+        dout[abs(self.input) + self.input == 0] = 0
         return dout
 
 
@@ -344,9 +386,30 @@ class Sigmoid(Layer):
         self.channels = inputs.channels
 
     def forward(self, x):
-        self.x = x
         self.sigmoid_x = sigmoid(x)
         return self.sigmoid_x
 
     def backward(self, dout):
         return dout * self.sigmoid_x * (1.0 - self.sigmoid_x)
+
+
+class Add(Layer):
+    def __init__(self, name=None):
+        Layer.__init__(self, None, name)
+
+    # x = Add()([x, y])
+    def call(self, inputs):
+        self.shape = inputs[0].shape
+        self.channels = inputs[0].channels
+
+    # x.forward([x_data, y_data])
+    def forward(self, x):
+        out = 0
+        for item in x:
+            out = out + item
+
+        return out
+
+    # return [d_x_out, d_y_out]
+    def backward(self, dout):
+        return [dout for _ in self.input]
