@@ -7,13 +7,36 @@ import quantumbrain as qb
 from quantumbrain.datasets import mnist
 import numpy as np
 
+# resnet block
+def res_block(name, inputs, filters, down_sample=False):
+    strides = 2 if down_sample else 1
+
+    layer = qb.layers.Conv(filters, 1, 1, kernel_initializer="he", name=name+"conv:1")(inputs)
+    layer = qb.layers.Relu(name=name+"relu:1")(layer)
+
+    layer = qb.layers.Conv(filters, 3, strides, kernel_initializer="he", name=name+"conv:2")(layer)
+    layer = qb.layers.Relu(name=name+"relu:2")(layer)
+
+    shortcut = inputs
+    if down_sample:
+        shortcut = qb.layers.Conv(filters, 1, strides, name=name+"conv:3")(shortcut)
+
+    layer = qb.layers.Add(name=name+"add:1")([layer, shortcut])
+    layer = qb.layers.Relu(name=name+"relu:3")(layer)
+
+    return layer
+
 
 def create_model():
     inputs = qb.layers.Input([None, 1, 28, 28])
     x = qb.layers.Conv(6, 3, 2, kernel_initializer="he")(inputs)
     x = qb.layers.Relu()(x)
-    x = qb.layers.Conv(16, 3, 2, kernel_initializer="he")(x)
-    x = qb.layers.Relu()(x)
+    x = res_block("block1", x, 6, True)
+
+    x = qb.layers.Conv(12, 3, 2)(x)
+     for idx in range(2):
+        x = res_block("block:{}".format(2 + idx), x, 32, False)
+    
     x = qb.layers.Dropout(drop_rate=0.5)(x)
     x = qb.layers.Flatten()(x)
     x = qb.layers.Dense(100, kernel_initializer="he")(x)
@@ -27,6 +50,7 @@ def create_model():
 
 
 def accuracy(x, y):
+    model.trainable = False
     y_pred = model(x)
     y_pred = np.argmax(y_pred, axis=1)
 
