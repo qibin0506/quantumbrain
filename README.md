@@ -64,6 +64,7 @@ def accuracy(x, y):
 
 
 model = create_model()
+model.summary()
 loss = qb.losses.CE()
 optimizer = qb.optimizers.Adam()
 

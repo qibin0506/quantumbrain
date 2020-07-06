@@ -61,6 +61,22 @@ class Model:
 
         return layer
 
+    def summary(self):
+        print("{:30}\t\t{:30}".format("Layer(type)", "Output Shape"))
+        print("==========================================================")
+
+        layers = list(graph.layers.values())
+        for layer in layers[:len(layers) - 1]:
+            layer_name_col = "{}({})".format(layer.name, layer.__class__.__name__)
+            print("{:30}\t\t{}".format(layer_name_col, str(layer.shape)))
+            print("---------------------------------------------------------")
+
+        last_layer = layers[-1]
+        last_layer_name_col = "{}({})".format(last_layer.name, last_layer.__class__.__name__)
+        print("{:30}\t\t{}".format(last_layer_name_col, str(last_layer.shape)))
+
+        print("==========================================================")
+
     def save(self, path):
         serialize(path, graph.params, graph.grads)
 
