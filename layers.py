@@ -250,8 +250,7 @@ class Conv(Layer):
 
         db = np.sum(dout, axis=0)
 
-        # dout: (N*out_h*out_w, FN), col: (N*out_h*out_w, C
-        # *filter_h*filter_w)
+        # dout: (N*out_h*out_w, FN), col: (N*out_h*out_w, C*filter_h*filter_w)
         # (C*filter_h*filter_w, FN)
         dW = np.dot(self.col.T, dout)
         # (FN, C*filter_h*filter_w)
