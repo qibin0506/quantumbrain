@@ -17,7 +17,7 @@ class Model:
         layer = self.inputs
         layer.trainable = self.trainable
 
-        layer.execute_forward(x)
+        layer.run_forward(x)
         layer = layer.next[0]
 
         while layer is not None:
@@ -25,7 +25,7 @@ class Model:
             previous = layer.previous
 
             if len(previous) == 1:
-                layer.execute_forward(previous[0].out)
+                layer.run_forward(previous[0].out)
 
                 if debug.debug_mode:
                     debug.dump("{}.forward()".format(layer.name))
@@ -39,7 +39,7 @@ class Model:
                 for item in previous:
                     next_input.append(item.out)
 
-                layer.execute_forward(next_input)
+                layer.run_forward(next_input)
 
                 if debug.debug_mode:
                     debug.dump("{}.forward()".format(layer.name))

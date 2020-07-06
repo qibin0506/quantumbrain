@@ -43,7 +43,7 @@ class Layer:
     def call(self, inputs):
         pass
 
-    def execute_forward(self, x):
+    def run_forward(self, x):
         self._clear_grads()
 
         self.input = x
@@ -52,7 +52,7 @@ class Layer:
 
         return self.out
 
-    def execute_backward(self, dout):
+    def run_backward(self, dout):
         return self.backward(dout)
 
     def forward(self, x):
@@ -280,7 +280,11 @@ class MaxPool(Layer):
 
         self.pool_size = pool_size
         self.stride = stride
-        self.pad = 1 if pad is 'same' else 0
+
+        if pad is 'valid':
+            self.pad = 0
+        else:
+            self.pad = (pool_size - 1) // 2
 
         self.arg_max = None
 

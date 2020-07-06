@@ -20,7 +20,7 @@ class Trainer:
         while len(layers) > 0:
             layer = layers.pop()
             dout = douts.pop()
-            dout = layer.execute_backward(dout)
+            dout = layer.run_backward(dout)
 
             if debug.debug_mode:
                 debug.dump("{}.backward()".format(layer.name))

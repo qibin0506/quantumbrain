@@ -31,12 +31,15 @@ def create_model():
     inputs = qb.layers.Input([None, 1, 28, 28])
     x = qb.layers.Conv(6, 3, 2, kernel_initializer="he")(inputs)
     x = qb.layers.Relu()(x)
-    x = res_block("block1", x, 6, True)
 
-    x = qb.layers.Conv(12, 3, 2)(x)
-     for idx in range(2):
-        x = res_block("block:{}".format(2 + idx), x, 32, False)
-    
+    x = res_block("block1_0", x, 6, True)
+    for idx in range(2):
+        x = res_block("block1_{}".format(1 + idx), x, 6, False)
+
+    x = res_block("block2_0", x, 12, True)
+    for idx in range(2):
+        x = res_block("block2_{}".format(1 + idx), x, 12, False)
+
     x = qb.layers.Dropout(drop_rate=0.5)(x)
     x = qb.layers.Flatten()(x)
     x = qb.layers.Dense(100, kernel_initializer="he")(x)
