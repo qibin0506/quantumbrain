@@ -4,64 +4,57 @@ from quantumbrain import debug
 
 
 class Model:
-    def __init__(self, inputs, outputs):
+    def __init__(self, inputs, outputs, name=None):
         self.inputs = inputs
         self.outputs = outputs
 
         self.trainable = False
+        self.name = "model" if name is None else name
 
     def __call__(self, *args, **kwargs):
         return self.call(args[0])
 
     def call(self, x):
-        layer = self.inputs
-        layer.trainable = self.trainable
-
-        layer.run_forward(x)
-        layer = layer.next[0]
-
-        while layer is not None:
-            layer.trainable = self.trainable
-            previous = layer.previous
-
-            if len(previous) == 1:
-                layer.run_forward(previous[0].out)
-
-                if debug.debug_mode:
-                    debug.dump("{}.forward()".format(layer.name))
-            else:
-                not_forward_root = self.__find_not_forward_layer_root(layer)
-                if not_forward_root != layer:
-                    layer = not_forward_root
-                    continue
-
-                next_input = []
-                for item in previous:
-                    next_input.append(item.out)
-
-                layer.run_forward(next_input)
-
-                if debug.debug_mode:
-                    debug.dump("{}.forward()".format(layer.name))
-
-            if layer is self.outputs:
-                break
-
-            layer = layer.next[0]
-
         for layer in graph.layers.values():
-            layer.forwarded = False
+            layer.forward_degree = layer.forward_degree_origin
+            layer.trainable = self.trainable
+
+        removed = [self.inputs]
+
+        while len(removed) > 0:
+            layer = removed.pop()
+            self.__run_forward(layer, x)
+
+            for next_layer in layer.next:
+                next_layer.forward_degree -= 1
+                if next_layer.forward_degree == 0:
+                    removed.append(next_layer)
 
         return self.outputs.out
 
-    def __find_not_forward_layer_root(self, layer):
-        for previous in layer.previous:
-            if not previous.forwarded:
-                return self.__find_not_forward_layer_root(previous)
+    def __run_forward(self, layer, x):
+        previous = layer.previous
 
-        return layer
+        if len(previous) == 0:
+            layer.run_forward(x)
+        elif len(previous) == 1:
+            layer.run_forward(previous[0].out)
+
+            if debug.debug_mode:
+                debug.dump("{}.forward()".format(layer.name))
+        else:
+            next_input = []
+            for item in previous:
+                next_input.append(item.out)
+
+            layer.run_forward(next_input)
+
+            if debug.debug_mode:
+                debug.dump("{}.forward()".format(layer.name))
 
     def summary(self):
+        print("Model: \"{}\"".format(self.name))
+        print("----------------------------------------------------------")
         print("{:30}\t\t{:30}".format("Layer(type)", "Output Shape"))
         print("==========================================================")
 

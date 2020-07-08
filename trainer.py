@@ -1,3 +1,4 @@
+from quantumbrain.graph import graph
 from quantumbrain import debug
 
 
@@ -14,27 +15,33 @@ class Trainer:
         loss_value = self.loss(y, pred)
         dout = self.loss.backward()
 
-        layers = [self.model.outputs]
-        douts = [dout]
+        for layer in graph.layers.values():
+            layer.backward_degree = layer.backward_degree_origin
 
-        while len(layers) > 0:
-            layer = layers.pop()
-            dout = douts.pop()
-            dout = layer.run_backward(dout)
+        removed = [self.model.outputs]
 
-            if debug.debug_mode:
-                debug.dump("{}.backward()".format(layer.name))
+        while len(removed) > 0:
+            layer = removed.pop()
+            self.__run_backward(layer, dout)
 
-            if layer == self.model.inputs:
-                continue
-
-            if len(layer.previous) == 1:
-                layers.append(layer.previous[0])
-                douts.append(dout)
-            else:
-                layers.extend(layer.previous)
-                douts.extend(dout)
+            for pre_layer in layer.previous:
+                pre_layer.backward_degree -= 1
+                if pre_layer.backward_degree == 0:
+                    removed.append(pre_layer)
 
         self.optimizer.apply_gradients()
-
         return pred, loss_value
+
+    def __run_backward(self, layer, dout):
+        if len(layer.next) == 0:
+            layer.run_backward(dout)
+        else:
+            for next_layer in layer.next:
+                if len(next_layer.previous) == 1:
+                    layer.run_backward(next_layer.grads)
+                else:
+                    idx = next_layer.previous.index(layer)
+                    layer.run_backward(next_layer.grads[idx])
+
+        if debug.debug_mode:
+            debug.dump("{}.backward()".format(layer.name))

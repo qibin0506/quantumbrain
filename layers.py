@@ -11,30 +11,44 @@ class Layer:
         self.channels = channels
 
         self.trainable = True
-        self.forwarded = False
-
         self.shape = None
 
         # data
         self.input = None
         self.out = None
 
+        # grads
+        self.grads = None
+
         # layer
         self.previous = []
         self.next = []
+
+        self.forward_degree_origin = 0
+        self.backward_degree_origin = 0
+        self.forward_degree = 0
+        self.backward_degree = 0
 
     def __call__(self, *args, **kwargs):
         graph.layers[self.name] = self
 
         if len(args) != 0:
             previous = args[0]
+
             if isinstance(previous, list):
                 self.previous.extend(previous)
+                self.forward_degree_origin = len(previous)
+
                 for prev in self.previous:
                     prev.next.append(self)
+                    prev.backward_degree_origin += 1
+
             else:
                 self.previous.append(previous)
                 previous.next.append(self)
+
+                self.forward_degree_origin = 1
+                previous.backward_degree_origin += 1
 
             self.call(previous)
 
@@ -45,15 +59,16 @@ class Layer:
 
     def run_forward(self, x):
         self._clear_grads()
+        self.grads = None
 
         self.input = x
         self.out = self.forward(x)
-        self.forwarded = True
-
-        return self.out
 
     def run_backward(self, dout):
-        return self.backward(dout)
+        if self.grads is None:
+            self.grads = self.backward(dout)
+        else:
+            self.grads += self.backward(dout)
 
     def forward(self, x):
         pass
@@ -68,10 +83,12 @@ class Layer:
         graph.params[self.__wrap_arg_name(name)] = value
 
     def _set_grads(self, name, grads):
-        if self.__wrap_arg_name(name) in graph.grads.keys():
-            graph.grads[self.__wrap_arg_name(name)] += grads
+        key = self.__wrap_arg_name(name)
+
+        if key in graph.grads.keys():
+            graph.grads[key] += grads
         else:
-            graph.grads[self.__wrap_arg_name(name)] = grads
+            graph.grads[key] = grads
 
     def _get_grads(self, name):
         return graph.grads[self.__wrap_arg_name(name)]
