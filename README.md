@@ -86,7 +86,7 @@ for epoch in range(10):
 
 Output:
 
-
+```
 Model: "model"
 
 \----------------------------------------------------------
@@ -230,6 +230,7 @@ epoch: 7, accuracy: 0.9554
 epoch: 8, accuracy: 0.9568
 
 epoch: 9, accuracy: 0.9595
+```
 
 ## save & restore weights
 
