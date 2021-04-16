@@ -1,6 +1,6 @@
 # quantumbrain
 
-A python, numpy implemention deep learning framework.
+Yet Another Deep Learning Framework.
 
 ## Train example
 
